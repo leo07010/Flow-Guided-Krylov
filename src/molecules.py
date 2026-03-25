@@ -30,6 +30,8 @@ from .hamiltonians.molecular import (
     create_n2_cas_hamiltonian,
     create_cr2_hamiltonian,
     create_benzene_hamiltonian,
+    create_2fe2s_fcidump_hamiltonian,
+    create_4fe4s_fcidump_hamiltonian,
 )
 
 
@@ -337,6 +339,21 @@ MOLECULE_REGISTRY: Dict[str, dict] = {
         "n_qubits": 58,
         "description": "Chromium dimer CAS(12,29) cc-pVDZ (Cr2)",
         "basis": "cc-pVDZ",
+        "is_cas": True,
+    },
+    # --- Iron-sulfur clusters (FCIDUMP, Li & Chan 2017 / IBM SQD 2024) ---
+    "2Fe2S": {
+        "factory": create_2fe2s_fcidump_hamiltonian,
+        "n_qubits": 40,
+        "description": "[2Fe-2S] cluster CAS(30e,20o) TZP-DKH (FCIDUMP)",
+        "basis": "TZP-DKH",
+        "is_cas": True,
+    },
+    "4Fe4S": {
+        "factory": create_4fe4s_fcidump_hamiltonian,
+        "n_qubits": 72,
+        "description": "[4Fe-4S] cluster CAS(54e,36o) TZP-DKH (FCIDUMP)",
+        "basis": "TZP-DKH",
         "is_cas": True,
     },
 }

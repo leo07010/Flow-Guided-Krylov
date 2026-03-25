@@ -3217,3 +3217,122 @@ def create_fe2s2_hamiltonian(
         n_beta=n_beta_cas,
     )
     return MolecularHamiltonian(integrals, device=device)
+
+
+# =============================================================================
+# FCIDUMP loader and iron-sulfur cluster factory functions
+# =============================================================================
+
+from pathlib import Path as _Path
+
+_FCIDUMP_DIR = _Path(__file__).parent / "fcidump"
+
+
+def load_fcidump_integrals(fcidump_path: str) -> "MolecularIntegrals":
+    """Load molecular integrals from a FCIDUMP file.
+
+    FCIDUMP is a standard format (Knowles & Handy 1989) for storing
+    one- and two-electron integrals. Used by MOLPRO, PySCF, ORCA, etc.
+
+    Args:
+        fcidump_path: Path to the FCIDUMP file.
+
+    Returns:
+        MolecularIntegrals compatible with MolecularHamiltonian.
+        Note: _geometry/_basis metadata are NOT set; PySCF disk caching
+        is not applicable (FCIDUMP files are already pre-computed integrals).
+    """
+    try:
+        from pyscf.tools import fcidump as pyscf_fcidump
+        from pyscf import ao2mo as _ao2mo
+    except ImportError:
+        raise ImportError("PySCF is required to read FCIDUMP files (pip install pyscf)")
+
+    data = pyscf_fcidump.read(str(fcidump_path))
+
+    norb = int(data["NORB"])
+    nelec = data["NELEC"]
+    ms2 = int(data.get("MS2", 0))
+
+    if isinstance(nelec, (list, tuple)):
+        n_alpha, n_beta = int(nelec[0]), int(nelec[1])
+        n_electrons = n_alpha + n_beta
+    else:
+        n_electrons = int(nelec)
+        n_alpha = (n_electrons + ms2) // 2
+        n_beta = (n_electrons - ms2) // 2
+
+    h1e = np.asarray(data["H1"], dtype=np.float64).reshape(norb, norb)
+    h2e_raw = np.asarray(data["H2"], dtype=np.float64)
+    h2e = _ao2mo.restore(1, h2e_raw, norb)
+    ecore = float(data.get("ECORE", 0.0))
+
+    return MolecularIntegrals(
+        h1e=h1e,
+        h2e=h2e,
+        nuclear_repulsion=ecore,
+        n_electrons=n_electrons,
+        n_orbitals=norb,
+        n_alpha=n_alpha,
+        n_beta=n_beta,
+    )
+
+
+def create_2fe2s_fcidump_hamiltonian(
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+) -> "MolecularHamiltonian":
+    """Create [2Fe-2S] Hamiltonian from Li & Chan (2017) FCIDUMP integrals.
+
+    Active space: CAS(30e, 20o) — 40 qubits (Jordan-Wigner).
+    Basis: TZP-DKH (scalar relativistic).
+    DMRG reference energy: -116.6056091 Ha (bond dim 8000).
+
+    This is the same integral set used by:
+    - IBM SQD (Robledo-Moreno et al., Science Advances 2025)
+    - Reinholdt et al. critical limitations study (JCTC 2025)
+
+    Source: https://github.com/jrm874/sqd_data_repository
+
+    Returns:
+        MolecularHamiltonian with 20 orbitals (40 spin-orbital qubits).
+    """
+    fcidump_path = _FCIDUMP_DIR / "2Fe2S.fcidump"
+    if not fcidump_path.exists():
+        raise FileNotFoundError(
+            f"FCIDUMP file not found: {fcidump_path}\n"
+            "Run: wget -O src/hamiltonians/fcidump/2Fe2S.fcidump "
+            "https://raw.githubusercontent.com/jrm874/sqd_data_repository/"
+            "refs/heads/main/integrals/2Fe-2S/fcidump_Fe2S2_MO.txt"
+        )
+    integrals = load_fcidump_integrals(str(fcidump_path))
+    return MolecularHamiltonian(integrals, device=device)
+
+
+def create_4fe4s_fcidump_hamiltonian(
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+) -> "MolecularHamiltonian":
+    """Create [4Fe-4S] Hamiltonian from Li & Chan (2017) FCIDUMP integrals.
+
+    Active space: CAS(54e, 36o) — 72 qubits (Jordan-Wigner).
+    Hilbert space: ~8.86×10^15 determinants.
+    Basis: TZP-DKH (scalar relativistic).
+
+    This is the same integral set used in:
+    - IBM SQD 77-qubit experiment (Robledo-Moreno et al., Science Advances 2025)
+      (77 qubits = 72 spin-orbitals + 5 ancilla qubits in their quantum circuit)
+
+    Source: https://github.com/jrm874/sqd_data_repository
+
+    Returns:
+        MolecularHamiltonian with 36 orbitals (72 spin-orbital qubits).
+    """
+    fcidump_path = _FCIDUMP_DIR / "4Fe4S.fcidump"
+    if not fcidump_path.exists():
+        raise FileNotFoundError(
+            f"FCIDUMP file not found: {fcidump_path}\n"
+            "Run: wget -O src/hamiltonians/fcidump/4Fe4S.fcidump "
+            "https://raw.githubusercontent.com/jrm874/sqd_data_repository/"
+            "refs/heads/main/integrals/4Fe-4S/fcidump_Fe4S4_MO.txt"
+        )
+    integrals = load_fcidump_integrals(str(fcidump_path))
+    return MolecularHamiltonian(integrals, device=device)
